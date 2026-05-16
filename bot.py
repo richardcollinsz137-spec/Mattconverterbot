@@ -1,72 +1,74 @@
 import os
 import logging
 import asyncio
-from telegram import Update, constants
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from pdf_handler import extract_text_from_pdf
+from pdf_handler import process_pdf
 
 # Logging setup
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Updated welcome text with casino branding
     welcome_text = (
-        "👋 **Hello! I'm Matt, your PDF-to-Text Bot.**\n\n"
-        "Send me any PDF file, and I will extract the text for you. "
-        "I can even handle scanned documents using OCR!"
+        "🎰 **You have arrived at the fastest Crypto Casino...**\n\n"
+        "⚡ Fast Signup, Instant Withdrawals and Exclusive VIP Benefits!\n\n"
+        "🚀 Start playing now: https://betplay.io"
     )
-    await update.message.reply_text(welcome_text, parse_mode=constants.ParseMode.MARKDOWN)
+    await update.message.reply_text(welcome_text, parse_mode="Markdown", disable_web_page_preview=False)
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = update.message.document
+    doc = update.message.document
     
-    if file.mime_type != 'application/pdf':
+    if doc.mime_type != 'application/pdf':
         await update.message.reply_text("❌ Please send a valid PDF file.")
         return
 
-    processing_msg = await update.message.reply_text("⏳ Processing your file...")
-    
+    status_msg = await update.message.reply_text("⏳ Processing your file...")
+
     try:
         # Download file
-        pdf_file = await file.get_file()
-        file_path = f"temp_{file.file_id}.pdf"
-        await pdf_file.download_to_drive(file_path)
+        file_obj = await context.bot.get_file(doc.file_id)
+        file_path = f"downloads/{doc.file_id}.pdf"
+        os.makedirs("downloads", exist_ok=True)
+        await file_obj.download_to_drive(file_path)
 
-        # Extract Text
-        extracted_text = await extract_text_from_pdf(file_path)
-        
-        if not extracted_text:
-            await processing_msg.edit_text("⚠️ Could not extract text. The PDF might be empty or corrupted.")
+        # Process PDF
+        extracted_text = await process_pdf(file_path)
+
+        if not extracted_text.strip():
+            await status_msg.edit_text("⚠️ The PDF appears to be empty or unreadable.")
         elif len(extracted_text) < 4000:
-            await processing_msg.delete()
+            await status_msg.delete()
             await update.message.reply_text(f"📄 **PDF Converted Successfully**\n\n{extracted_text}")
         else:
-            # Send as file if too long
-            await processing_msg.edit_text("📄 Text is long. Sending as a .txt file...")
-            text_filename = f"extracted_{file.file_unique_id}.txt"
-            with open(text_filename, "w", encoding="utf-8") as f:
+            # Long text -> Send as .txt file
+            txt_path = f"downloads/{doc.file_id}.txt"
+            with open(txt_path, "w", encoding="utf-8") as f:
                 f.write(extracted_text)
             
-            await update.message.reply_document(document=open(text_filename, "rb"), caption="✅ Extraction Complete")
-            os.remove(text_filename)
+            await status_msg.delete()
+            await update.message.reply_document(document=open(txt_path, 'rb'), caption="📄 Text too long for a message. Here is the file!")
+            os.remove(txt_path)
 
     except Exception as e:
-        logging.error(f"Handler Error: {e}")
-        await update.message.reply_text("❌ An error occurred while processing the file.")
+        logger.error(f"Error: {e}")
+        await status_msg.edit_text("❌ An error occurred while processing your file.")
+    
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
 
 if __name__ == '__main__':
     if not BOT_TOKEN:
-        print("Error: BOT_TOKEN not found in environment variables.")
-        exit(1)
+        print("Error: BOT_TOKEN environment variable not set.")
+    else:
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
         
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
-    
-    print("Matt Bot is running...")
-    app.run_polling()
+        print("Matt Bot is running...")
+        app.run_polling()

@@ -1,75 +1,55 @@
 import os
 import logging
-import asyncio
+import sys
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from pdf_handler import process_pdf
 
-# Logging setup
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Absolute strict logging output to system console
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+    stream=sys.stdout
+)
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # FIXED: String exactly matches your request and eliminates Markdown conflicts
+    """Triggers instantly when /start is hit."""
+    logger.info(f"Start command received from user: {update.effective_user.id}")
+    
     welcome_text = (
         "You have arrived at the fastest Crypto Casino... "
         "Fast Signup, Instant Withdrawals and Exclusive VIP Benefits! "
         "Start playing now; https://betplay.io"
     )
-    # Changed parse_mode to avoid silent parsing failures
-    await update.message.reply_text(welcome_text, disable_web_page_preview=False)
-
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    doc = update.message.document
     
-    if doc.mime_type != 'application/pdf':
-        await update.message.reply_text("❌ Please send a valid PDF file.")
-        return
+    # We send text cleanly without markdown flags to guarantee zero parser hangs
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=welcome_text,
+        disable_web_page_preview=False
+    )
 
-    status_msg = await update.message.reply_text("⏳ Processing your file...")
-
-    try:
-        # Download file
-        file_obj = await context.bot.get_file(doc.file_id)
-        file_path = f"downloads/{doc.file_id}.pdf"
-        os.makedirs("downloads", exist_ok=True)
-        await file_obj.download_to_drive(file_path)
-
-        # Process PDF
-        extracted_text = await process_pdf(file_path)
-
-        if not extracted_text.strip():
-            await status_msg.edit_text("⚠️ The PDF appears to be empty or unreadable.")
-        elif len(extracted_text) < 4000:
-            await status_msg.delete()
-            await update.message.reply_text(f"📄 PDF Converted Successfully\n\nHere is your extracted text 👇\n\n{extracted_text}")
-        else:
-            # Long text -> Send as .txt file
-            txt_path = f"downloads/{doc.file_id}.txt"
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(extracted_text)
-            
-            await status_msg.delete()
-            await update.message.reply_document(document=open(txt_path, 'rb'), caption="📄 PDF Converted Successfully\n\nHere is your extracted text 👇")
-            os.remove(txt_path)
-
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        await status_msg.edit_text("❌ An error occurred while processing your file.")
-    
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Logs any hidden system errors preventing messages from sending."""
+    logger.error(f"Exception encountered while handling an update: {context.error}")
 
 if __name__ == '__main__':
     if not BOT_TOKEN:
-        print("Error: BOT_TOKEN environment variable not set.")
-    else:
-        app = ApplicationBuilder().token(BOT_TOKEN).build() 
-        app.add_handler(CommandHandler("start", start))
-        app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
+        logger.critical("CRITICAL: BOT_TOKEN environment variable is completely empty!")
+        sys.exit(1)
         
-        print("Matt Bot is running...")
-        app.run_polling()
+    logger.info("Initializing Matt Bot structural build...")
+    
+    # Build application with fallback parameters
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Register handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_error_handler(error_handler)
+    
+    logger.info("Connecting to Telegram servers... Bot is now active.")
+    
+    # drop_pending_updates ignores older text spam and forces immediate responsiveness
+    app.run_polling(drop_pending_updates=True)

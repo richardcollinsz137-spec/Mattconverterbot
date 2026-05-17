@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from pdf_handler import process_pdf
 
-# Setup absolute strict logging to catch errors instantly
+# Force absolute direct logging output to Render console logs
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -18,7 +18,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Triggers instantly when /start is pressed and sends the clean text + CTA button."""
-    logger.info(f"👉 /start command detected from user ID: {update.effective_user.id}")
+    logger.info(f"--- [START COMMAND TRIGGERED BY USER: {update.effective_user.id}] ---")
     try:
         welcome_text = (
             "You have arrived at the fastest Crypto Casino... "
@@ -26,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Start playing now;"
         )
         
-        # Build the exact CTA Button requested
+        # Build CTA Button
         keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -83,12 +83,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"🚨 Telegram Bot Framework Error: {context.error}")
 
-def main():
+async def main_async():
+    """Initializes and runs the application context in a unified async loop."""
     if not BOT_TOKEN:
         logger.critical("❌ CRITICAL: BOT_TOKEN environment variable is missing!")
         sys.exit(1)
         
-    logger.info("Building Matt Bot core application...")
+    logger.info("Building Matt Bot core application setup...")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
     # Register core handlers
@@ -96,9 +97,22 @@ def main():
     app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
     app.add_error_handler(error_handler)
     
-    logger.info("🚀 Matt Bot is starting up... cleaning old updates...")
-    # This prevents any loops freezing up on start
-    app.run_polling(drop_pending_updates=True)
+    logger.info("🚀 Matt Bot initialization complete. Flushing old updates and establishing link...")
+    
+    # Initialize application
+    await app.initialize()
+    await app.updater.start_polling(drop_pending_updates=True)
+    await app.start()
+    
+    # Keep running indefinitely inside Render's background loop
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    main()
+    try:
+        # Strict control wrapper for Python 3.11+ asyncio lifecycles
+        asyncio.run(main_async())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot execution manually stopped.")
+    except Exception as startup_error:
+        logger.critical(f"Fatal crash during runner bootstrap: {startup_error}")

@@ -3,9 +3,9 @@ import logging
 import sys
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Explicit setup to ensure logs stream directly into Render's dashboard in real-time
+# Synchronize system stdout for live logs on Render
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -15,17 +15,15 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Global set to keep track of user chat IDs for the 6-hour reminder system
-# Note: For production with frequent restarts, consider storing these in a database/file.
+# Global track loop for the 6-hour nudge sequence
 active_users = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles the sequential onboarding flow when a user clicks /start."""
+    """Triggers when a user clicks /start or boots the bot."""
     chat_id = update.effective_chat.id
     active_users.add(chat_id)
-    logger.info(f"👉 /start command triggered by User ID: {update.effective_user.id}")
+    logger.info(f"👉 /start sequence initiated by user: {chat_id}")
     
-    # 1. New Promotional Text Content
     welcome_text = (
         "WELCOME!!!\n"
         "🔥The NEXT LEVEL Crypto Casino is HERE🔥\n"
@@ -40,8 +38,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        # 2. Send the promotional photo along with the text caption
-        # Looks for 'photo.jpg' in the root directory
+        # Send photo.jpg along with text content layout
         if os.path.exists('photo.jpg'):
             await context.bot.send_photo(
                 chat_id=chat_id,
@@ -49,17 +46,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption=welcome_text
             )
         else:
-            # Fallback text if the image is missing from the directory
             await context.bot.send_message(chat_id=chat_id, text=welcome_text)
-            logger.warning("⚠️ photo.jpg was not found in the root directory. Sent text fallback.")
+            logger.warning("⚠️ photo.jpg was missing from directory. Text fallback used.")
 
-        # 3. Intermediate message
+        # Hold message block
         await context.bot.send_message(chat_id=chat_id, text="Hold on for three seconds for access link")
         
-        # 4. Strict 3-second delay
+        # Exact requested delay
         await asyncio.sleep(3)
         
-        # 5. Deliver CTA button with tracking referral link
+        # Build CTA with tracking referral link
         keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io/?ref=e55fe7b2df3d")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -68,14 +64,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text="🚀 Access Granted! Click the button below to register:",
             reply_markup=reply_markup
         )
-        logger.info(f"✅ Onboarding sequence completed for user {chat_id}")
+        logger.info(f"✅ Onboarding routine fully delivered to {chat_id}")
 
     except Exception as e:
-        logger.error(f"❌ Failed to complete start sequence for user {chat_id}: {e}")
+        logger.error(f"❌ Error during start sequence: {e}")
 
 async def send_reminders(context: ContextTypes.DEFAULT_TYPE):
-    """Job callback that runs automatically every 6 hours to broadcast reminders."""
-    logger.info(f"🔄 Executing scheduled 6-hour sign-up reminder broadcast to {len(active_users)} users.")
+    """Job process running every 6 hours automatically."""
+    logger.info(f"🔄 Broadcasting automatic 6-hour tracking link update to {len(active_users)} profiles.")
     
     keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io/?ref=e55fe7b2df3d")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -87,34 +83,33 @@ async def send_reminders(context: ContextTypes.DEFAULT_TYPE):
     
     for chat_id in list(active_users):
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=reminder_text,
-                reply_markup=reply_markup
-            )
+            await context.bot.send_message(chat_id=chat_id, text=reminder_text, reply_markup=reply_markup)
         except Exception as e:
-            logger.warning(f"Could not send reminder to chat {chat_id} (User may have blocked the bot): {e}")
+            logger.warning(f"Could not reach chat profile {chat_id}: {e}")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"🚨 FRAMEWORK ERROR ENCOUNTERED: {context.error}")
+    logger.error(f"🚨 Internals error message: {context.error}")
 
 def main():
     if not BOT_TOKEN:
-        logger.critical("❌ DEPLOYMENT FAILED: The BOT_TOKEN environment variable is totally missing!")
+        logger.critical("❌ Environment Error: BOT_TOKEN is empty!")
         sys.exit(1)
         
-    logger.info("🔧 Step 1: Building Telegram application instance...")
+    logger.info("Building framework architecture application mapping...")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # Bind handlers
+    # Handlers layout
     app.add_handler(CommandHandler("start", start))
     app.add_error_handler(error_handler)
     
-    # 6. Initialize Job Queue for recurring reminders (6 hours = 21600 seconds)
-    job_queue = app.job_queue
-    job_queue.run_repeating(send_reminders, interval=21600, first=21600)
-    
-    logger.info("🚀 Step 2: Launching polling routine and reminder routines...")
+    # Setup intervals (6 hours = 21600 seconds)
+    if app.job_queue:
+        app.job_queue.run_repeating(send_reminders, interval=21600, first=21600)
+        logger.info("📅 Job scheduler attached successfully.")
+    else:
+        logger.critical("❌ Critical: JobQueue could not initialize. Check dependencies.")
+        
+    logger.info("🚀 Connection established. The bot is actively listening...")
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

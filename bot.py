@@ -16,7 +16,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Fires instantly when a user sends /start."""
-    logger.info(f"👉 CRITICAL LOG: /start command triggered by User ID: {update.effective_user.id}")
+    logger.info(f"👉 /start command triggered by User ID: {update.effective_user.id}")
     
     welcome_text = (
         "You have arrived at the fastest Crypto Casino... "
@@ -24,12 +24,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Start playing now;"
     )
     
-    # Inline CTA Button Structure
-    keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io")]]
+    # Inline CTA Button Structure with updated Referral Link
+    keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io/?ref=e55fe7b2df3d")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(text=welcome_text, reply_markup=reply_markup)
-    logger.info("✅ SUCCESS: Welcome message with CTA delivered to chat.")
+    logger.info("✅ SUCCESS: Welcome message with new tracking link delivered to chat.")
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Triggers if Telegram blocks a message transmission."""
@@ -48,7 +48,7 @@ def main():
     app.add_error_handler(error_handler)
     
     logger.info("🚀 Step 2: Launching polling routine and flushing old message queues...")
-    # drop_pending_updates=True is vital. It ignores old clicks from when the bot was offline.
+    # drop_pending_updates=True ignores old clicks from when the bot was offline.
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':

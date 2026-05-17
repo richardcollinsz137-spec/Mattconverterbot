@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from pdf_handler import process_pdf
 
-# Force absolute direct logging output to Render console logs
+# Direct system stdout logging to ensure logs print live on Render's dashboard
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
@@ -17,29 +17,28 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Triggers instantly when /start is pressed and sends the clean text + CTA button."""
-    logger.info(f"--- [START COMMAND TRIGGERED BY USER: {update.effective_user.id}] ---")
-    try:
-        welcome_text = (
-            "You have arrived at the fastest Crypto Casino... "
-            "Fast Signup, Instant Withdrawals and Exclusive VIP Benefits! "
-            "Start playing now;"
-        )
-        
-        # Build CTA Button
-        keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(text=welcome_text, reply_markup=reply_markup)
-        logger.info("✅ Welcome message with CTA button delivered successfully.")
-    except Exception as e:
-        logger.error(f"❌ Failed to send welcome message: {e}")
+    """Triggers instantly when /start is hit, providing the CTA button link."""
+    logger.info(f"📥 [START RECEIVED] User ID: {update.effective_user.id}")
+    
+    welcome_text = (
+        "You have arrived at the fastest Crypto Casino... "
+        "Fast Signup, Instant Withdrawals and Exclusive VIP Benefits! "
+        "Start playing now;"
+    )
+    
+    # Precise Inline CTA Button implementation
+    keyboard = [[InlineKeyboardButton("Click Here", url="https://betplay.io")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(text=welcome_text, reply_markup=reply_markup)
+    logger.info("📤 [START SENT] Welcome message dispatched successfully.")
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Processes incoming PDF documents."""
+    """Validates and processes incoming PDF files."""
     doc = update.message.document
+    
     if doc.mime_type != 'application/pdf' and not doc.file_name.lower().endswith('.pdf'):
-        await update.message.reply_text("❌ Error: Please send a valid PDF file.")
+        await update.message.reply_text("❌ Please send a valid PDF file.")
         return
 
     status_msg = await update.message.reply_text("⏳ Processing your file...")
@@ -58,8 +57,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if len(extracted_text) < 3500:
             await status_msg.delete()
-            response_msg = f"📄 **PDF Converted Successfully**\n\nHere is your extracted text 👇\n\n{extracted_text}"
-            await update.message.reply_text(response_msg, parse_mode="Markdown")
+            await update.message.reply_text(
+                f"📄 **PDF Converted Successfully**\n\nHere is your extracted text 👇\n\n{extracted_text}",
+                parse_mode="Markdown"
+            )
         else:
             txt_path = f"downloads/{doc.file_id}.txt"
             with open(txt_path, "w", encoding="utf-8") as f:
@@ -80,39 +81,39 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(file_path):
             os.remove(file_path)
 
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-    logger.error(f"🚨 Telegram Bot Framework Error: {context.error}")
-
-async def main_async():
-    """Initializes and runs the application context in a unified async loop."""
+async def main():
+    """Initializes the background worker cleanly without blocking loop allocations."""
     if not BOT_TOKEN:
-        logger.critical("❌ CRITICAL: BOT_TOKEN environment variable is missing!")
-        sys.exit(1)
-        
-    logger.info("Building Matt Bot core application setup...")
+        logger.critical("❌ CRITICAL: BOT_TOKEN environmental variable is missing!")
+        return
+
+    logger.info("Initializing application builder context...")
+    # Initialize the core application layout
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # Register core handlers
+    # Attach tracking events
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
-    app.add_error_handler(error_handler)
     
-    logger.info("🚀 Matt Bot initialization complete. Flushing old updates and establishing link...")
-    
-    # Initialize application
+    # Manual context initialization to bypass async network freezing loops
+    logger.info("Starting polling interface and clearing out old queue updates...")
     await app.initialize()
     await app.updater.start_polling(drop_pending_updates=True)
     await app.start()
     
-    # Keep running indefinitely inside Render's background loop
-    while True:
-        await asyncio.sleep(3600)
+    logger.info("🚀 Matt Bot is fully listening. Connection established successfully.")
+    
+    # Maintain open async loops indefinitely for the Render worker instance
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot execution loop stopped.")
+    finally:
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
 
 if __name__ == '__main__':
-    try:
-        # Strict control wrapper for Python 3.11+ asyncio lifecycles
-        asyncio.run(main_async())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot execution manually stopped.")
-    except Exception as startup_error:
-        logger.critical(f"Fatal crash during runner bootstrap: {startup_error}")
+    # Use native asyncio runner logic
+    asyncio.run(main())

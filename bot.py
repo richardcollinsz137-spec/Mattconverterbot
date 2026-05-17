@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Global track loop for the 6-hour nudge sequence
+# Global tracking set for the 6-hour automated reminder sequence
 active_users = set()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Triggers when a user clicks /start or boots the bot."""
+    """Triggers when a user clicks /start, delivering the hosted graphic first."""
     chat_id = update.effective_chat.id
     active_users.add(chat_id)
     logger.info(f"👉 /start sequence initiated by user: {chat_id}")
@@ -37,22 +37,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👉Join NOW and start winning today"
     )
     
+    # Your direct image hosting link
+    IMAGE_URL = "https://freeimage.host/i/Bp4092f"
+    
     try:
-        # Send photo.jpg along with text content layout
-        if os.path.exists('photo.jpg'):
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=open('photo.jpg', 'rb'),
-                caption=welcome_text
-            )
-        else:
-            await context.bot.send_message(chat_id=chat_id, text=welcome_text)
-            logger.warning("⚠️ photo.jpg was missing from directory. Text fallback used.")
+        # Send the hosted image directly from the URL with your text as the caption
+        await context.bot.send_photo(
+            chat_id=chat_id,
+            photo=IMAGE_URL,
+            caption=welcome_text
+        )
+        logger.info("📸 Graphic sent successfully via external URL.")
 
         # Hold message block
         await context.bot.send_message(chat_id=chat_id, text="Hold on for three seconds for access link")
         
-        # Exact requested delay
+        # Exact 3-second delay requirement
         await asyncio.sleep(3)
         
         # Build CTA with tracking referral link
@@ -68,6 +68,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"❌ Error during start sequence: {e}")
+        # Secure text fallback if Telegram has trouble fetching from the host site
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=welcome_text)
+        except Exception as text_err:
+            logger.error(f"❌ Complete communication failure: {text_err}")
 
 async def send_reminders(context: ContextTypes.DEFAULT_TYPE):
     """Job process running every 6 hours automatically."""
@@ -107,7 +112,7 @@ def main():
         app.job_queue.run_repeating(send_reminders, interval=21600, first=21600)
         logger.info("📅 Job scheduler attached successfully.")
     else:
-        logger.critical("❌ Critical: JobQueue could not initialize. Check dependencies.")
+        logger.critical("❌ Critical: JobQueue could not initialize. Double check requirements.txt includes [job-queue].")
         
     logger.info("🚀 Connection established. The bot is actively listening...")
     app.run_polling(drop_pending_updates=True)
